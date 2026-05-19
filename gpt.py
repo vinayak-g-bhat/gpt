@@ -14,7 +14,7 @@ if not input_file.exists():
 input_text = ''
 with open('input.txt','r',encoding='utf-8') as file:
     input_text = file.read()
-̦
+
 vocab =  sorted(list(set(input_text)))
 
 ctoi = {ch:i for i,ch in enumerate(vocab) }
