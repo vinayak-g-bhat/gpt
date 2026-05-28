@@ -1,6 +1,8 @@
 from pathlib import Path
 import urllib.request
 import torch
+from torch import nn
+from torch.nn import functional as F
 
 input_file = Path("input.txt")
 
@@ -38,6 +40,33 @@ def get_batch(isTraining):
     y = torch.stack([source[1+batch_offset: batch_offset + block_size + 1] for batch_offset in batch_offsets]) 
     return x,y
 
+
+
+class BigramNeuralNetwork(nn.Module):
+
+    def __init__(self,vocab_size):
+        print(vocab_size)
+        super().__init__()
+        self.token_embedding_table = nn.Embedding(vocab_size,vocab_size)
+
+    def forward(self,idx,targets):
+
+        logits = self.token_embedding_table(idx) #(B,T,C)
+        B,T,C = logits.shape
+        logits = logits.view(B*T,C)
+        targets = targets.view(B*T)
+        loss = F.cross_entropy(logits,targets) 
+
+        return logits,loss 
+
+
 xt,yt = get_batch(True)
-print(xt)
-print(yt)
+
+bm = BigramNeuralNetwork(len(vocab))
+logits,loss = bm.forward(xt,yt)
+
+
+print(logits)
+print(loss) 
+
+
