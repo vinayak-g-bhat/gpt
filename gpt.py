@@ -22,7 +22,7 @@ vocab =  sorted(list(set(input_text)))
 ctoi = {ch:i for i,ch in enumerate(vocab) }
 itoc = {i:ch for i,ch in enumerate(vocab)}
 encode = lambda s:   [ctoi[ch] for ch in s]
-decode = lambda l: ''.join([itoc(i) for i in l])
+decode = lambda l: ''.join([itoc[i] for i in l])
 
 data = torch.tensor(encode(input_text),dtype=torch.long)
 split_index = int(data.size(0) * 0.9)
@@ -42,31 +42,41 @@ def get_batch(isTraining):
 
 
 
+
 class BigramNeuralNetwork(nn.Module):
 
     def __init__(self,vocab_size):
-        print(vocab_size)
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size,vocab_size)
 
-    def forward(self,idx,targets):
-
+    def forward(self,idx,targets=None):
         logits = self.token_embedding_table(idx) #(B,T,C)
-        B,T,C = logits.shape
-        logits = logits.view(B*T,C)
-        targets = targets.view(B*T)
-        loss = F.cross_entropy(logits,targets) 
+        loss = None
+        if targets != None:
+            B,T,C = logits.shape
+            logits = logits.view(B*T,C)
+            targets = targets.view(B*T)
+            loss = F.cross_entropy(logits,targets) 
 
         return logits,loss 
+    
+    def generate(self,prompt,max_tokens):
+        for token in range(max_tokens):
+            logits,loss = self(prompt) # __call__ method of nn.Module will be called
+            logits = logits[:,-1,:]
 
+            probalities = F.softmax(logits,dim=1)
+            prediction = torch.multinomial(probalities,num_samples=1)
+            prompt = torch.cat((prompt,prediction),dim=1)
+        return prompt
 
 xt,yt = get_batch(True)
 
 bm = BigramNeuralNetwork(len(vocab))
-logits,loss = bm.forward(xt,yt)
+logits,loss = bm(xt,yt)
 
+prompt = torch.zeros((1,1),dtype=torch.long)
+generated_tokens = bm.generate(prompt,max_tokens=100)
 
-print(logits)
-print(loss) 
-
+print(decode(generated_tokens[0].tolist()))
 
