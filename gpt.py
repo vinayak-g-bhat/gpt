@@ -76,7 +76,20 @@ bm = BigramNeuralNetwork(len(vocab))
 logits,loss = bm(xt,yt)
 
 prompt = torch.zeros((1,1),dtype=torch.long)
-generated_tokens = bm.generate(prompt,max_tokens=100)
+
+optimizer = torch.optim.AdamW(bm.parameters())
+
+batch_size = 32
+for steps in range(10000):
+    xt,yt = get_batch(True)
+    logtis,loss = bm(xt,yt)
+    optimizer.zero_grad(set_to_none=True)
+    loss.backward()
+    optimizer.step()
+
+print(loss.item())
+
+
+generated_tokens = bm.generate(prompt,max_tokens=300)
 
 print(decode(generated_tokens[0].tolist()))
-
