@@ -86,6 +86,28 @@ class Head(nn.Module):
         return out
 
 
+class MultiHead(nn.Module):
+
+    def __init__(self,num_heads,head_size):
+        super().__init__()
+        self.sa_heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+
+    def forward(self,x):
+        return torch.cat([h(x) for h in self.sa_heads],dim=-1)
+
+
+class FeedForward(nn.Module):
+
+    def __init__(self,embed_dimen):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(embed_dimen,embed_dimen),
+            nn.ReLU()
+        )
+
+    def forward(self,x):
+        return self.net(x)
+
 
 class BigramNeuralNetwork(nn.Module):
 
@@ -93,7 +115,8 @@ class BigramNeuralNetwork(nn.Module):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size,embed_dimen)
         self.position_embedding_table = nn.Embedding(block_size,embed_dimen)
-        self.sa_head = Head(embed_dimen)
+        self.sa_heads = MultiHead(4, embed_dimen//4)
+        self.ffx = FeedForward(embed_dimen)
         self.l_head = nn.Linear(embed_dimen,vocab_size)
 
     def forward(self,idx,targets=None):
@@ -101,7 +124,8 @@ class BigramNeuralNetwork(nn.Module):
         token_embdding = self.token_embedding_table(idx) #(B,T,embed_dimen)
         position_embedding = self.position_embedding_table(torch.arange(T,device = device))#(B,T,embed_dimen)
         x = token_embdding + position_embedding #(B,T,embed_dimen)
-        x = self.sa_head(x)
+        x = self.sa_heads(x)
+        x = self.ffx(x)
         logits = self.l_head(x) #(B,T,vocab_size)
         
 
