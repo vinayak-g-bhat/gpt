@@ -39,6 +39,7 @@ print(device)
 eval_iters = 200
 embed_dimen = 32
 training_steps = 5000
+num_heads = 4
 
 
 def get_batch(isTraining):
@@ -108,6 +109,17 @@ class FeedForward(nn.Module):
     def forward(self,x):
         return self.net(x)
 
+class Block(nn.Module):
+
+    def __init__(self,num_heads,embed_dimen):
+        super().__init__()
+        self.sa_heads = MultiHead(num_heads,embed_dimen//num_heads)
+        self.ffx = FeedForward(embed_dimen)
+
+    def forward(self,x):
+        x = self.sa_heads(x)
+        out = self.ffx(x)
+        return out
 
 class BigramNeuralNetwork(nn.Module):
 
@@ -115,8 +127,9 @@ class BigramNeuralNetwork(nn.Module):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size,embed_dimen)
         self.position_embedding_table = nn.Embedding(block_size,embed_dimen)
-        self.sa_heads = MultiHead(4, embed_dimen//4)
+        self.sa_heads = MultiHead(num_heads, embed_dimen//num_heads)
         self.ffx = FeedForward(embed_dimen)
+        self.block = Block(num_heads,embed_dimen)
         self.l_head = nn.Linear(embed_dimen,vocab_size)
 
     def forward(self,idx,targets=None):
@@ -126,6 +139,7 @@ class BigramNeuralNetwork(nn.Module):
         x = token_embdding + position_embedding #(B,T,embed_dimen)
         x = self.sa_heads(x)
         x = self.ffx(x)
+        x = self.block(x)
         logits = self.l_head(x) #(B,T,vocab_size)
         
 
