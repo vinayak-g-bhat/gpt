@@ -92,18 +92,20 @@ class MultiHead(nn.Module):
     def __init__(self,num_heads,head_size):
         super().__init__()
         self.sa_heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
+        self.proj = nn.Linear(embed_dimen,embed_dimen)
 
     def forward(self,x):
-        return torch.cat([h(x) for h in self.sa_heads],dim=-1)
-
+        x= torch.cat([h(x) for h in self.sa_heads],dim=-1)
+        return self.proj(x)
 
 class FeedForward(nn.Module):
 
     def __init__(self,embed_dimen):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(embed_dimen,embed_dimen),
-            nn.ReLU()
+            nn.Linear(embed_dimen,4*embed_dimen),
+            nn.ReLU(),
+            nn.Linear(4*embed_dimen,embed_dimen)
         )
 
     def forward(self,x):
@@ -117,8 +119,8 @@ class Block(nn.Module):
         self.ffx = FeedForward(embed_dimen)
 
     def forward(self,x):
-        x = self.sa_heads(x)
-        out = self.ffx(x)
+        x = x + self.sa_heads(x)
+        out = x + self.ffx(x)
         return out
 
 class BigramNeuralNetwork(nn.Module):
@@ -178,16 +180,23 @@ optimizer = torch.optim.AdamW(bm.parameters(),lr=learning_rate)
 
 batch_size = 32
 for steps in range(training_steps):
+    
+    #calculate and log loss at regular intervals
+    if steps % eval_iters == 0 or steps == training_steps - 1:
+        losses = estimate_loss()
+        print(f"step {steps}: training loss={losses['train']}, evaluation loss={losses['eval']}")
+
     xt,yt = get_batch(True)
     logtis,loss = bm(xt,yt)
     optimizer.zero_grad(set_to_none=True)
     loss.backward()
     optimizer.step()
 
-print(loss.item())
+print('basic loss' , loss.item())
 
 
-generated_tokens = bm.generate(prompt,max_tokens=100)
+
+generated_tokens = bm.generate(prompt,max_tokens=300)
 end = time.time()
 print(f"Elapsed: {end - start:.4f}s")
 
