@@ -32,14 +32,16 @@ train_data = data[:split_index] #90% of text is used for training
 val_data = data[split_index:] #10% or left overs are kept asisde for validation
 learning_rate = 1e-3
 torch.manual_seed(1337)
-block_size = 8
-batch_size = 4
-device = torch.device("cpu") if torch.backends.mps.is_available() else torch.device("cpu")
+block_size = 256
+batch_size = 64
+device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 print(device)
 eval_iters = 200
-embed_dimen = 32
+embed_dimen = 384
 training_steps = 5000
 num_heads = 4
+n_layers = 4
+dropout = 0.2
 
 
 def get_batch(isTraining):
@@ -74,6 +76,7 @@ class Head(nn.Module):
         self.value = nn.Linear(embed_dimen,head_size,bias=False)
         self.query = nn.Linear(embed_dimen,head_size,bias=False)
         self.register_buffer('tril',torch.tril(torch.ones(embed_dimen,embed_dimen)))
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self,x):
         B,T,C = x.shape
@@ -84,6 +87,7 @@ class Head(nn.Module):
         wei = F.softmax(wei,dim=1)
         value = self.value(x)
         out = wei @ value
+        out = self.dropout(out)
         return out
 
 
@@ -93,9 +97,11 @@ class MultiHead(nn.Module):
         super().__init__()
         self.sa_heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
         self.proj = nn.Linear(embed_dimen,embed_dimen)
+        self.dropout= nn.Dropout(dropout)
 
     def forward(self,x):
         x= torch.cat([h(x) for h in self.sa_heads],dim=-1)
+        x = self.dropout(x)
         return self.proj(x)
 
 class FeedForward(nn.Module):
@@ -105,7 +111,8 @@ class FeedForward(nn.Module):
         self.net = nn.Sequential(
             nn.Linear(embed_dimen,4*embed_dimen),
             nn.ReLU(),
-            nn.Linear(4*embed_dimen,embed_dimen)
+            nn.Linear(4*embed_dimen,embed_dimen),
+            nn.Dropout(dropout)
         )
 
     def forward(self,x):
@@ -117,10 +124,12 @@ class Block(nn.Module):
         super().__init__()
         self.sa_heads = MultiHead(num_heads,embed_dimen//num_heads)
         self.ffx = FeedForward(embed_dimen)
+        self.norm1 = nn.LayerNorm(embed_dimen)
+        self.norm2 = nn.LayerNorm(embed_dimen)
 
     def forward(self,x):
-        x = x + self.sa_heads(x)
-        out = x + self.ffx(x)
+        x = x + self.sa_heads(self.norm1(x))
+        out = x + self.ffx(self.norm2(x))
         return out
 
 class BigramNeuralNetwork(nn.Module):
@@ -131,7 +140,8 @@ class BigramNeuralNetwork(nn.Module):
         self.position_embedding_table = nn.Embedding(block_size,embed_dimen)
         self.sa_heads = MultiHead(num_heads, embed_dimen//num_heads)
         self.ffx = FeedForward(embed_dimen)
-        self.block = Block(num_heads,embed_dimen)
+        self.blocks = nn.Sequential(*[Block(num_heads,embed_dimen) for _ in range(n_layers)])
+        self.n_norm = nn.LayerNorm(embed_dimen)
         self.l_head = nn.Linear(embed_dimen,vocab_size)
 
     def forward(self,idx,targets=None):
@@ -141,7 +151,8 @@ class BigramNeuralNetwork(nn.Module):
         x = token_embdding + position_embedding #(B,T,embed_dimen)
         x = self.sa_heads(x)
         x = self.ffx(x)
-        x = self.block(x)
+        x = self.blocks(x)
+        x = self.n_norm(x)
         logits = self.l_head(x) #(B,T,vocab_size)
         
 
