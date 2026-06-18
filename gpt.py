@@ -30,6 +30,8 @@ data = torch.tensor(encode(input_text),dtype=torch.long)
 split_index = int(data.size(0) * 0.9)
 train_data = data[:split_index] #90% of text is used for training
 val_data = data[split_index:] #10% or left overs are kept asisde for validation
+
+#hyperparameters
 learning_rate = 1e-3
 torch.manual_seed(1337)
 block_size = 256
@@ -38,7 +40,7 @@ device = torch.device("mps") if torch.backends.mps.is_available() else torch.dev
 print(device)
 eval_iters = 200
 embed_dimen = 384
-training_steps = 5000
+training_steps = 100
 num_heads = 4
 n_layers = 4
 dropout = 0.2
@@ -75,7 +77,7 @@ class Head(nn.Module):
         self.key = nn.Linear(embed_dimen,head_size,bias=False)
         self.value = nn.Linear(embed_dimen,head_size,bias=False)
         self.query = nn.Linear(embed_dimen,head_size,bias=False)
-        self.register_buffer('tril',torch.tril(torch.ones(embed_dimen,embed_dimen)))
+        self.register_buffer('tril',torch.tril(torch.ones(block_size,block_size)))
         self.dropout = nn.Dropout(dropout)
 
     def forward(self,x):
@@ -85,9 +87,9 @@ class Head(nn.Module):
         wei = query @ k.transpose(-2,-1) * k.shape[-1]**-0.5 # post matrix multiplication each element in the matrix is normalized by 1/sqrt(head_size). 
         wei = wei.masked_fill(self.tril[:T,:T]==0,float('-inf'))
         wei = F.softmax(wei,dim=1)
+        wei = self.dropout(wei)
         value = self.value(x)
         out = wei @ value
-        out = self.dropout(out)
         return out
 
 
@@ -101,8 +103,8 @@ class MultiHead(nn.Module):
 
     def forward(self,x):
         x= torch.cat([h(x) for h in self.sa_heads],dim=-1)
-        x = self.dropout(x)
-        return self.proj(x)
+        x = self.dropout(self.proj(x))
+        return x
 
 class FeedForward(nn.Module):
 
@@ -138,8 +140,6 @@ class BigramNeuralNetwork(nn.Module):
         super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size,embed_dimen)
         self.position_embedding_table = nn.Embedding(block_size,embed_dimen)
-        self.sa_heads = MultiHead(num_heads, embed_dimen//num_heads)
-        self.ffx = FeedForward(embed_dimen)
         self.blocks = nn.Sequential(*[Block(num_heads,embed_dimen) for _ in range(n_layers)])
         self.n_norm = nn.LayerNorm(embed_dimen)
         self.l_head = nn.Linear(embed_dimen,vocab_size)
@@ -149,8 +149,6 @@ class BigramNeuralNetwork(nn.Module):
         token_embdding = self.token_embedding_table(idx) #(B,T,embed_dimen)
         position_embedding = self.position_embedding_table(torch.arange(T,device = device))#(B,T,embed_dimen)
         x = token_embdding + position_embedding #(B,T,embed_dimen)
-        x = self.sa_heads(x)
-        x = self.ffx(x)
         x = self.blocks(x)
         x = self.n_norm(x)
         logits = self.l_head(x) #(B,T,vocab_size)
