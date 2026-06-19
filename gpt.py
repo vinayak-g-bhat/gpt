@@ -32,7 +32,7 @@ train_data = data[:split_index] #90% of text is used for training
 val_data = data[split_index:] #10% or left overs are kept asisde for validation
 
 #hyperparameters
-learning_rate = 1e-3
+learning_rate = 3e-4
 torch.manual_seed(1337)
 block_size = 256
 batch_size = 64
@@ -40,9 +40,9 @@ device = torch.device("mps") if torch.backends.mps.is_available() else torch.dev
 print(device)
 eval_iters = 200
 embed_dimen = 384
-training_steps = 100
-num_heads = 4
-n_layers = 4
+training_steps = 5000
+num_heads = 6
+n_layers = 6
 dropout = 0.2
 
 
@@ -134,7 +134,7 @@ class Block(nn.Module):
         out = x + self.ffx(self.norm2(x))
         return out
 
-class BigramNeuralNetwork(nn.Module):
+class GPTLanguageModel(nn.Module):
 
     def __init__(self):
         super().__init__()
@@ -176,17 +176,9 @@ class BigramNeuralNetwork(nn.Module):
 
 start = time.time()
 
-
-xt,yt = get_batch(True)
-
-bm = BigramNeuralNetwork()
+bm = GPTLanguageModel()
 bm.to(device)
-logits,loss = bm(xt,yt)
-
-prompt = torch.zeros((1,1),dtype=torch.long,device=device)
-
 optimizer = torch.optim.AdamW(bm.parameters(),lr=learning_rate)
-
 batch_size = 32
 for steps in range(training_steps):
     
@@ -201,13 +193,9 @@ for steps in range(training_steps):
     loss.backward()
     optimizer.step()
 
-print('basic loss' , loss.item())
 
-
-
-generated_tokens = bm.generate(prompt,max_tokens=300)
+prompt = torch.zeros((1,1),dtype=torch.long,device=device)
+generated_tokens = bm.generate(prompt,max_tokens=3000)
 end = time.time()
 print(f"Elapsed: {end - start:.4f}s")
-
-
 print(decode(generated_tokens[0].tolist()))
