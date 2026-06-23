@@ -32,18 +32,19 @@ train_data = data[:split_index] #90% of text is used for training
 val_data = data[split_index:] #10% or left overs are kept asisde for validation
 
 #hyperparameters
-learning_rate = 3e-4
+learning_rate = 1e-3
 torch.manual_seed(1337)
-block_size = 256
-batch_size = 64
+block_size = 32
+batch_size = 16
 device = torch.device("mps") if torch.backends.mps.is_available() else torch.device("cpu")
 print(device)
 eval_iters = 200
-embed_dimen = 384
+embed_dimen = 64
 training_steps = 5000
-num_heads = 6
-n_layers = 6
-dropout = 0.2
+num_heads = 4
+n_layers = 4
+dropout = 0.0
+
 
 
 def get_batch(isTraining):
@@ -185,7 +186,7 @@ for steps in range(training_steps):
     #calculate and log loss at regular intervals
     if steps % eval_iters == 0 or steps == training_steps - 1:
         losses = estimate_loss()
-        print(f"step {steps}: training loss={losses['train']}, evaluation loss={losses['eval']}")
+        print(f"step {steps}: training loss={losses['train']:.4f}, evaluation loss={losses['eval']:.4f}")
 
     xt,yt = get_batch(True)
     logtis,loss = bm(xt,yt)
@@ -193,6 +194,8 @@ for steps in range(training_steps):
     loss.backward()
     optimizer.step()
 
+
+print(sum((p.numel() for p in bm.parameters()))/1e6,"M parameters")
 
 prompt = torch.zeros((1,1),dtype=torch.long,device=device)
 generated_tokens = bm.generate(prompt,max_tokens=3000)
